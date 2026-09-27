@@ -82,24 +82,30 @@ export interface TripDocument {
   file_type: string
   file_size: number
   created_at: string
+  // Populated only in offline/demo mode, where files are kept as base64 in localStorage
+  data_url?: string | null
 }
+
+export type ChecklistCategory = 'essentials' | 'documents' | 'electronics' | 'clothing' | 'toiletries' | 'other'
 
 export interface ChecklistItem {
   id: string
   trip_id: string
-  category: string
+  category: ChecklistCategory
   item_text: string
   is_completed: boolean
   assigned_to?: string | null
   created_at: string
 }
 
+export type ExpenseCategory = 'food' | 'transport' | 'lodging' | 'shopping' | 'activities' | 'other'
+
 export interface ExpenseItem {
   id: string
   trip_id: string
   title: string
   amount: number
-  category: string
+  category: ExpenseCategory
   paid_by: string
   date: string
   created_at: string

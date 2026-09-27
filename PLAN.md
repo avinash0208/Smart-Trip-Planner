@@ -130,29 +130,34 @@ erDiagram
 - Multi-day itinerary planner with dynamic day tabs, schedule timelines, and full CRUD operations for activities.
 - TanStack Query hooks and `tripService` for Supabase database sync.
 
-### 📌 Phase 3: Interactive Maps & Destination Explorer *(Next)*
+### ✅ Phase 3: Interactive Maps & Destination Explorer *(Completed)*
 - Interactive Leaflet / Mapbox map synchronized with the itinerary.
 - Map markers for daily activities (Sightseeing, Dining, Lodging, Transit).
 - Route visualizer connecting daily destinations.
 - Global destination discovery page (`/explore`) with filters and "Add to Trip" actions.
 
-### 📌 Phase 4: AI Travel Engine & Smart Recommendations
-- AI-Powered Itinerary Generator: One-click creation based on duration, interests, pace, and budget tier.
-- Context-Aware Travel Companion Chatbot: Suggests offbeat spots, local dining, and rainy-day alternatives.
-- GPT Trip Summarizer: "Your trip in 2 minutes".
+### ✅ Phase 4: AI Travel Engine & Smart Recommendations *(Completed)*
+- AI-Powered Itinerary Generator (`/ai-planner`): One-click itinerary creation from duration, interests, pace, and budget tier, with a save-as-trip flow via Gemini structured output.
+- Context-Aware Travel Companion Chatbot: Per-trip chat with quick prompt chips for food, budget, packing, and rainy-day suggestions.
+- GPT Trip Summarizer: "Your trip in 2 minutes" — highlights, local customs, and packing tips.
+- `aiService` wraps the Gemini REST API (`gemini-flash-latest`) with graceful offline fallbacks when `VITE_GEMINI_API_KEY` isn't configured.
 
-### 📌 Phase 5: Document Vault, Checklists & Expense Tracker
-- Booking & Ticket Vault: Upload and preview flight/hotel PDFs via Supabase Storage.
-- Smart Packing Checklists: Categorized packing lists with AI climate/activity suggestions.
-- Expense Tracker & Currency Converter: Live budget meter and conversion rates.
+### 📌 Phase 5: Document Vault, Checklists & Expense Tracker *(Completed)*
+- Booking & Ticket Vault: Upload, preview/download, and delete flight/hotel/insurance files via Supabase Storage (private `trip-documents` bucket), with an offline demo-mode fallback that keeps small files inline as base64.
+- Smart Packing Checklists: Categorized checklist items (Essentials, Documents, Electronics, Clothing, Toiletries, Other) with progress tracking and an "AI Suggest Packing List" action powered by `aiService`.
+- Expense Tracker: Per-trip expense log with category breakdown and a Spent vs. Allocated budget meter, using the existing multi-currency `CurrencyContext` for display/conversion.
+- New `documents`, `checklists`, and `expenses` Supabase tables + RLS policies in `supabase/schema.sql`, and `documentService` / `checklistService` / `expenseService` with the same local-storage demo fallback pattern as `tripService`.
+- Trip Details page (`/trips/:id`) now has Itinerary / Documents / Checklist / Budget section tabs.
 
-### 📌 Phase 6: Group Collaboration & Social Sharing
-- Real-time multi-user co-planning using Supabase Realtime channels.
-- Invites and permission roles (`Owner`, `Editor`, `Viewer`).
-- Public community feed (`/community`) with trip cloning.
-- Export itinerary as printable PDF or downloadable `.ics` calendar file.
+### 📌 Phase 6: Group Collaboration & Social Sharing *(Completed)*
+- Realtime Collaboration: `useTripCollaboration` hook subscribes to Supabase Realtime `postgres_changes` on `itinerary_days`, `activities`, and `trip_members` to live-refresh the itinerary for everyone viewing a trip, plus a lightweight "recent activity" banner.
+- Presence: Supabase Realtime Presence tracks who else is currently viewing a trip, shown as an avatar stack in the Trip Details action bar.
+- Collaborators & Roles: New "Collaborators" panel (`CollaboratorsModal`) to invite existing users by email with `Editor`/`Viewer` roles, change roles, remove collaborators, or leave a trip — backed by `tripMemberService` and new `trip_members` RLS policies.
+- Community Feed (`/community`): Browse publicly shared trips and "Clone to My Trips" (duplicates the trip, days, and activities) via `tripService.getPublicTrips()` / `cloneTrip()`.
+- Export & Print: "Export .ics" downloads a calendar file of the full itinerary (`calendarExport.ts`), and "Print / PDF" opens a print-friendly full-itinerary view (browser print → Save as PDF).
+- `supabase/schema.sql` adds `trip_members` RLS policies and enables the `supabase_realtime` publication for `itinerary_days`, `activities`, and `trip_members`.
 
-### 📌 Phase 7: Live Weather, Polish, PWA & Deployment
-- OpenWeatherMap integration for 7-day weather forecasts.
+### 📌 Phase 7: Live Weather, Polish, PWA & Deployment *(In Progress)*
+- ✅ Weather Widget: `weatherService` calls OpenWeatherMap's free 5-day/3-hour forecast API (aggregated into daily min/max + condition) with an offline sample-data fallback when `VITE_OPENWEATHER_API_KEY` isn't configured. Rendered via a reusable `WeatherWidget` on the Trip Details page (by destination city/country) and the Explore destination-insights panel (by exact coordinates).
 - Offline PWA caching for travel on the go without cellular data.
 - Production build optimization and deployment to Vercel / Netlify.

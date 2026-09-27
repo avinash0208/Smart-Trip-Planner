@@ -14,6 +14,8 @@ import { Dashboard } from '@/pages/Dashboard'
 import { MyTrips } from '@/pages/MyTrips'
 import { TripDetails } from '@/pages/TripDetails'
 import { Explore } from '@/pages/Explore'
+import { AIPlanner } from '@/pages/AIPlanner'
+import { Community } from '@/pages/Community'
 import { Settings } from '@/pages/Settings'
 import { NotFound } from '@/pages/NotFound'
 
@@ -52,6 +54,8 @@ export function App() {
                   <Route path="/trips" element={<MyTrips />} />
                   <Route path="/trips/:id" element={<TripDetails />} />
                   <Route path="/explore" element={<Explore />} />
+                  <Route path="/ai-planner" element={<AIPlanner />} />
+                  <Route path="/community" element={<Community />} />
                   <Route path="/settings" element={<Settings />} />
                 </Route>
 

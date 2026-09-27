@@ -16,11 +16,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Enable RLS on profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public profiles are viewable by authenticated users" ON public.profiles;
 CREATE POLICY "Public profiles are viewable by authenticated users"
   ON public.profiles FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
 CREATE POLICY "Users can update their own profile"
   ON public.profiles FOR UPDATE
   TO authenticated
@@ -77,7 +79,42 @@ CREATE TABLE IF NOT EXISTS public.trip_members (
 
 ALTER TABLE public.trip_members ENABLE ROW LEVEL SECURITY;
 
+-- Trip Members RLS Policies
+DROP POLICY IF EXISTS "Members can view collaborators of accessible trips" ON public.trip_members;
+CREATE POLICY "Members can view collaborators of accessible trips"
+  ON public.trip_members FOR SELECT
+  TO authenticated
+  USING (
+    trip_id IN (
+      SELECT id FROM public.trips WHERE owner_id = auth.uid() OR visibility = 'public'
+      UNION
+      SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Trip owners can invite collaborators" ON public.trip_members;
+CREATE POLICY "Trip owners can invite collaborators"
+  ON public.trip_members FOR INSERT
+  TO authenticated
+  WITH CHECK (trip_id IN (SELECT id FROM public.trips WHERE owner_id = auth.uid()));
+
+DROP POLICY IF EXISTS "Trip owners can change collaborator roles" ON public.trip_members;
+CREATE POLICY "Trip owners can change collaborator roles"
+  ON public.trip_members FOR UPDATE
+  TO authenticated
+  USING (trip_id IN (SELECT id FROM public.trips WHERE owner_id = auth.uid()));
+
+DROP POLICY IF EXISTS "Owners can remove collaborators and members can leave" ON public.trip_members;
+CREATE POLICY "Owners can remove collaborators and members can leave"
+  ON public.trip_members FOR DELETE
+  TO authenticated
+  USING (
+    user_id = auth.uid()
+    OR trip_id IN (SELECT id FROM public.trips WHERE owner_id = auth.uid())
+  );
+
 -- Trips RLS Policies
+DROP POLICY IF EXISTS "Users can view trips they own or belong to, or public trips" ON public.trips;
 CREATE POLICY "Users can view trips they own or belong to, or public trips"
   ON public.trips FOR SELECT
   TO authenticated
@@ -87,11 +124,13 @@ CREATE POLICY "Users can view trips they own or belong to, or public trips"
     OR id IN (SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Users can insert trips they own" ON public.trips;
 CREATE POLICY "Users can insert trips they own"
   ON public.trips FOR INSERT
   TO authenticated
   WITH CHECK (owner_id = auth.uid());
 
+DROP POLICY IF EXISTS "Owners and editors can update trips" ON public.trips;
 CREATE POLICY "Owners and editors can update trips"
   ON public.trips FOR UPDATE
   TO authenticated
@@ -100,6 +139,7 @@ CREATE POLICY "Owners and editors can update trips"
     OR id IN (SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid() AND role = 'editor')
   );
 
+DROP POLICY IF EXISTS "Only owners can delete trips" ON public.trips;
 CREATE POLICY "Only owners can delete trips"
   ON public.trips FOR DELETE
   TO authenticated
@@ -117,6 +157,7 @@ CREATE TABLE IF NOT EXISTS public.itinerary_days (
 
 ALTER TABLE public.itinerary_days ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "View itinerary days of viewable trips" ON public.itinerary_days;
 CREATE POLICY "View itinerary days of viewable trips"
   ON public.itinerary_days FOR SELECT
   TO authenticated
@@ -128,6 +169,7 @@ CREATE POLICY "View itinerary days of viewable trips"
     )
   );
 
+DROP POLICY IF EXISTS "Manage itinerary days for trip owners/editors" ON public.itinerary_days;
 CREATE POLICY "Manage itinerary days for trip owners/editors"
   ON public.itinerary_days FOR ALL
   TO authenticated
@@ -156,6 +198,7 @@ CREATE TABLE IF NOT EXISTS public.activities (
 
 ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "View activities of accessible days" ON public.activities;
 CREATE POLICY "View activities of accessible days"
   ON public.activities FOR SELECT
   TO authenticated
@@ -169,6 +212,7 @@ CREATE POLICY "View activities of accessible days"
     )
   );
 
+DROP POLICY IF EXISTS "Manage activities for trip owners/editors" ON public.activities;
 CREATE POLICY "Manage activities for trip owners/editors"
   ON public.activities FOR ALL
   TO authenticated
@@ -196,6 +240,7 @@ CREATE TABLE IF NOT EXISTS public.documents (
 
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Trip collaborators can view documents" ON public.documents;
 CREATE POLICY "Trip collaborators can view documents"
   ON public.documents FOR SELECT
   TO authenticated
@@ -207,6 +252,7 @@ CREATE POLICY "Trip collaborators can view documents"
     )
   );
 
+DROP POLICY IF EXISTS "Users can upload documents to accessible trips" ON public.documents;
 CREATE POLICY "Users can upload documents to accessible trips"
   ON public.documents FOR INSERT
   TO authenticated
@@ -218,3 +264,137 @@ CREATE POLICY "Users can upload documents to accessible trips"
       SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid() AND role IN ('owner', 'editor')
     )
   );
+
+DROP POLICY IF EXISTS "Uploaders and trip owners can delete documents" ON public.documents;
+CREATE POLICY "Uploaders and trip owners can delete documents"
+  ON public.documents FOR DELETE
+  TO authenticated
+  USING (
+    user_id = auth.uid()
+    OR trip_id IN (SELECT id FROM public.trips WHERE owner_id = auth.uid())
+  );
+
+-- Private storage bucket backing the documents table above
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('trip-documents', 'trip-documents', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Files are stored under `{auth.uid()}/{trip_id}/{filename}` so the first path segment gates access
+DROP POLICY IF EXISTS "Users can upload to their own document folder" ON storage.objects;
+CREATE POLICY "Users can upload to their own document folder"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'trip-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS "Users can view files in their own document folder" ON storage.objects;
+CREATE POLICY "Users can view files in their own document folder"
+  ON storage.objects FOR SELECT
+  TO authenticated
+  USING (bucket_id = 'trip-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS "Users can delete files in their own document folder" ON storage.objects;
+CREATE POLICY "Users can delete files in their own document folder"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'trip-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+-- 8. SMART PACKING & PRE-TRIP CHECKLISTS
+CREATE TABLE IF NOT EXISTS public.checklists (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  trip_id UUID REFERENCES public.trips(id) ON DELETE CASCADE NOT NULL,
+  category TEXT DEFAULT 'essentials' CHECK (category IN ('essentials', 'documents', 'electronics', 'clothing', 'toiletries', 'other')),
+  item_text TEXT NOT NULL,
+  is_completed BOOLEAN DEFAULT false,
+  assigned_to UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.checklists ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "View checklist items of accessible trips" ON public.checklists;
+CREATE POLICY "View checklist items of accessible trips"
+  ON public.checklists FOR SELECT
+  TO authenticated
+  USING (
+    trip_id IN (
+      SELECT id FROM public.trips WHERE owner_id = auth.uid() OR visibility = 'public'
+      UNION
+      SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Manage checklist items for trip owners/editors" ON public.checklists;
+CREATE POLICY "Manage checklist items for trip owners/editors"
+  ON public.checklists FOR ALL
+  TO authenticated
+  USING (
+    trip_id IN (
+      SELECT id FROM public.trips WHERE owner_id = auth.uid()
+      UNION
+      SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid() AND role IN ('owner', 'editor')
+    )
+  );
+
+-- 9. EXPENSE TRACKER
+CREATE TABLE IF NOT EXISTS public.expenses (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  trip_id UUID REFERENCES public.trips(id) ON DELETE CASCADE NOT NULL,
+  title TEXT NOT NULL,
+  amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  category TEXT DEFAULT 'other' CHECK (category IN ('food', 'transport', 'lodging', 'shopping', 'activities', 'other')),
+  paid_by TEXT,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "View expenses of accessible trips" ON public.expenses;
+CREATE POLICY "View expenses of accessible trips"
+  ON public.expenses FOR SELECT
+  TO authenticated
+  USING (
+    trip_id IN (
+      SELECT id FROM public.trips WHERE owner_id = auth.uid() OR visibility = 'public'
+      UNION
+      SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Manage expenses for trip owners/editors" ON public.expenses;
+CREATE POLICY "Manage expenses for trip owners/editors"
+  ON public.expenses FOR ALL
+  TO authenticated
+  USING (
+    trip_id IN (
+      SELECT id FROM public.trips WHERE owner_id = auth.uid()
+      UNION
+      SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid() AND role IN ('owner', 'editor')
+    )
+  );
+
+-- 10. REALTIME COLLABORATION
+-- Streams live INSERT/UPDATE/DELETE events for these tables to subscribed clients (idempotent — safe to re-run)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'itinerary_days'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.itinerary_days;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'activities'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.activities;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'trip_members'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.trip_members;
+  END IF;
+END $$;

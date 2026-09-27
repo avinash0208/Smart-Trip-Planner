@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { LocationPickerMap } from '@/components/trips/LocationPickerMap'
 import { useCurrency } from '@/context/CurrencyContext'
 import type { Activity } from '@/types/database.types'
 
@@ -99,6 +100,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [category, setCategory] = useState<Activity['category']>('sightseeing')
   const [cost, setCost] = useState('0')
   const [notes, setNotes] = useState('')
+  const [latitude, setLatitude] = useState('')
+  const [longitude, setLongitude] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -109,12 +112,16 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       setCategory(activityToEdit.category)
       setCost(String(activityToEdit.estimated_cost || 0))
       setNotes(activityToEdit.notes || '')
+      setLatitude(activityToEdit.lat?.toString() || '')
+      setLongitude(activityToEdit.lng?.toString() || '')
     } else {
       setPlaceName('')
       setTimeSlot('10:00 AM')
       setCategory('sightseeing')
       setCost('0')
       setNotes('')
+      setLatitude('')
+      setLongitude('')
     }
   }, [activityToEdit, isOpen])
 
@@ -124,6 +131,12 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     e.preventDefault()
     if (!placeName.trim()) {
       setError('Please provide a place or activity name')
+      return
+    }
+    const lat = latitude.trim() ? Number(latitude) : null
+    const lng = longitude.trim() ? Number(longitude) : null
+    if ((lat === null) !== (lng === null) || (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180))) {
+      setError('Enter valid latitude and longitude values, or leave both fields empty.')
       return
     }
 
@@ -139,6 +152,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           category,
           estimated_cost: Number(cost) || 0,
           notes: notes.trim() || null,
+          lat,
+          lng,
           order_index: activityToEdit ? activityToEdit.order_index : 99,
         },
         activityToEdit?.id
@@ -249,6 +264,35 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                   </button>
                 )
               })}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="font-bold text-foreground flex items-center gap-1">
+              <MapPin className="h-3 w-3 text-teal-600 dark:text-teal-400" /> Pin Location
+            </label>
+            <p className="text-[10px] text-muted-foreground">
+              Click on the map to drop a pin, or drag the pin to fine-tune it.
+            </p>
+            <LocationPickerMap
+              latitude={latitude.trim() ? Number(latitude) : null}
+              longitude={longitude.trim() ? Number(longitude) : null}
+              onChange={(lat, lng) => {
+                setLatitude(lat.toFixed(6))
+                setLongitude(lng.toFixed(6))
+              }}
+              className="h-48 w-full rounded-xl overflow-hidden z-0"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="font-bold text-foreground">Latitude</label>
+              <Input type="number" step="any" placeholder="35.0116" value={latitude} onChange={(e) => setLatitude(e.target.value)} className="rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-bold text-foreground">Longitude</label>
+              <Input type="number" step="any" placeholder="135.7681" value={longitude} onChange={(e) => setLongitude(e.target.value)} className="rounded-xl" />
             </div>
           </div>
 

@@ -7,6 +7,7 @@ import {
   Settings,
   Sparkles,
   PlusCircle,
+  Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -26,6 +27,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: 'My Trips', path: '/trips', icon: MapPin },
     { name: 'Explore Places', path: '/explore', icon: Compass },
     { name: 'AI Planner', path: '/ai-planner', icon: Sparkles, badge: 'AI Pro' },
+    { name: 'Community', path: '/community', icon: Globe },
     { name: 'Settings', path: '/settings', icon: Settings },
   ]
 
@@ -41,7 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <aside
         className={cn(
-          'fixed top-16 bottom-0 left-0 z-30 w-64 border-r bg-card/85 backdrop-blur-xl px-4 py-6 transition-all duration-300 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] flex flex-col justify-between shrink-0 overflow-y-auto',
+          'fixed top-16 bottom-0 left-0 z-30 w-64 border-r bg-card/85 backdrop-blur-xl px-4 py-6 transition-all duration-300 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] flex flex-col justify-between shrink-0 overflow-y-auto print:hidden',
           isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
         )}
       >

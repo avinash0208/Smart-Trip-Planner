@@ -498,4 +498,79 @@ export const tripService = {
     )
     return { error: null }
   },
+
+  // Fetch publicly shared trips for the Community feed
+  async getPublicTrips(): Promise<Trip[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('visibility', 'public')
+          .order('created_at', { ascending: false })
+          .limit(60)
+
+        if (!error && data) return data as Trip[]
+      } catch (err) {
+        console.error('Failed to get public trips from Supabase:', err)
+      }
+    }
+
+    // Local / Demo fallback
+    const localTrips = getLocalData<Trip[]>(mockTripsStorageKey, DEFAULT_MOCK_TRIPS)
+    return [...DEFAULT_MOCK_TRIPS, ...localTrips].filter((t) => t.visibility === 'public')
+  },
+
+  // Duplicates a trip (with its days & activities) as a new private trip for the given owner
+  async cloneTrip(sourceTripId: string, newOwnerId: string): Promise<{ trip: Trip | null; error: Error | null }> {
+    const { trip: sourceTrip, days: sourceDays, error: fetchError } = await this.getTripById(sourceTripId)
+    if (fetchError || !sourceTrip) {
+      return { trip: null, error: fetchError || new Error('Trip not found') }
+    }
+
+    const { trip: newTrip, error: createError } = await this.createTrip(
+      {
+        owner_id: newOwnerId,
+        title: `${sourceTrip.title} (Copy)`,
+        description: sourceTrip.description,
+        destination_city: sourceTrip.destination_city,
+        destination_country: sourceTrip.destination_country,
+        start_date: sourceTrip.start_date,
+        end_date: sourceTrip.end_date,
+        budget: sourceTrip.budget,
+        cover_image_url: sourceTrip.cover_image_url,
+        visibility: 'private',
+      },
+      Math.max(sourceDays.length, 1)
+    )
+
+    if (createError || !newTrip) {
+      return { trip: null, error: createError || new Error('Failed to clone trip') }
+    }
+
+    const { days: newDays } = await this.getTripById(newTrip.id)
+    const sortedNewDays = [...newDays].sort((a, b) => a.day_number - b.day_number)
+
+    await Promise.all(
+      sourceDays.flatMap((day, dayIdx) => {
+        const targetDay = sortedNewDays[dayIdx]
+        if (!targetDay) return []
+        return (day.activities || []).map((activity, activityIdx) =>
+          this.addActivity({
+            day_id: targetDay.id,
+            place_name: activity.place_name,
+            time_slot: activity.time_slot,
+            notes: activity.notes,
+            estimated_cost: activity.estimated_cost,
+            category: activity.category,
+            lat: activity.lat,
+            lng: activity.lng,
+            order_index: activityIdx,
+          })
+        )
+      })
+    )
+
+    return { trip: newTrip, error: null }
+  },
 }

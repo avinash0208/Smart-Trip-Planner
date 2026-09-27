@@ -22,19 +22,37 @@ import {
   Edit,
   Loader2,
   FolderOpen,
+  ListChecks,
+  FileText,
+  Wallet,
+  Users,
+  CalendarDays,
+  Printer,
 } from 'lucide-react'
 import { tripService } from '@/services/tripService'
 import { useCurrency } from '@/context/CurrencyContext'
+import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'
+import { generateTripIcs, downloadIcsFile } from '@/lib/calendarExport'
+import { useTripCollaboration } from '@/hooks/useTripCollaboration'
 import { ActivityModal } from '@/components/trips/ActivityModal'
 import { CreateTripModal } from '@/components/trips/CreateTripModal'
+import { ItineraryMap } from '@/components/trips/ItineraryMap'
+import { TripDocuments } from '@/components/trips/TripDocuments'
+import { TripChecklist } from '@/components/trips/TripChecklist'
+import { TripExpenses } from '@/components/trips/TripExpenses'
+import { CollaboratorsModal } from '@/components/trips/CollaboratorsModal'
+import { WeatherWidget } from '@/components/trips/WeatherWidget'
 import type { Activity } from '@/types/database.types'
+
+type TripSection = 'itinerary' | 'documents' | 'checklist' | 'budget'
 
 export const TripDetails: React.FC = () => {
   const { id: tripId } = useParams<{ id: string }>()
   const { format: formatPrice } = useCurrency()
+  const { user, profile } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -43,6 +61,8 @@ export const TripDetails: React.FC = () => {
   const [activityToEdit, setActivityToEdit] = useState<Activity | null>(null)
   const [isEditTripOpen, setIsEditTripOpen] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
+  const [section, setSection] = useState<TripSection>('itinerary')
+  const [isCollaboratorsOpen, setIsCollaboratorsOpen] = useState(false)
 
   // Fetch Trip Details & Days
   const {
@@ -57,6 +77,20 @@ export const TripDetails: React.FC = () => {
 
   const trip = data?.trip
   const days = data?.days || []
+  const isOwner = Boolean(trip && user && trip.owner_id === user.id)
+
+  const { activeUsers, recentActivity } = useTripCollaboration(
+    trip?.id,
+    days.map((d) => d.id),
+    user
+      ? {
+          id: user.id,
+          name: profile?.full_name || user.email || 'Traveler',
+          avatarUrl: profile?.avatar_url,
+        }
+      : null
+  )
+  const otherActiveUsers = activeUsers.filter((u) => u.id !== user?.id)
 
   // Add / Edit Activity Mutation
   const saveActivityMutation = useMutation({
@@ -116,6 +150,16 @@ export const TripDetails: React.FC = () => {
     navigator.clipboard.writeText(window.location.href)
     setCopiedLink(true)
     setTimeout(() => setCopiedLink(false), 2000)
+  }
+
+  const handleExportIcs = () => {
+    if (!trip) return
+    const ics = generateTripIcs(trip, days)
+    downloadIcsFile(`${trip.title || 'itinerary'}.ics`, ics)
+  }
+
+  const handlePrint = () => {
+    window.print()
   }
 
   const getCategoryBadge = (category: string) => {
@@ -201,7 +245,7 @@ export const TripDetails: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in-50 duration-500">
       {/* Back and Action Bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
         <Link to="/trips">
           <Button variant="ghost" size="sm" className="gap-1.5">
             <ArrowLeft className="h-4 w-4" />
@@ -209,7 +253,51 @@ export const TripDetails: React.FC = () => {
           </Button>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {otherActiveUsers.length > 0 && (
+            <div className="flex items-center -space-x-2 mr-1" title="Currently viewing this trip">
+              {otherActiveUsers.slice(0, 4).map((u) => (
+                <div
+                  key={u.id}
+                  title={u.name}
+                  className="h-7 w-7 rounded-full ring-2 ring-background bg-teal-600 text-white flex items-center justify-center text-[10px] font-bold overflow-hidden"
+                >
+                  {u.avatar_url ? (
+                    <img src={u.avatar_url} alt={u.name} className="h-full w-full object-cover" />
+                  ) : (
+                    u.name.charAt(0).toUpperCase()
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsCollaboratorsOpen(true)}
+            className="gap-1.5"
+          >
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Collaborators</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportIcs}
+            className="gap-1.5"
+          >
+            <CalendarDays className="h-4 w-4" />
+            <span className="hidden sm:inline">Export .ics</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrint}
+            className="gap-1.5"
+          >
+            <Printer className="h-4 w-4" />
+            <span className="hidden sm:inline">Print / PDF</span>
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -248,6 +336,13 @@ export const TripDetails: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {recentActivity.length > 0 && (
+        <div className="print:hidden flex items-center gap-2 px-3.5 py-2 rounded-xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-700 dark:text-teal-300 font-medium">
+          <Users className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{recentActivity[0]}</span>
+        </div>
+      )}
 
       {/* Hero Header */}
       <div className="relative rounded-3xl overflow-hidden bg-muted min-h-64 sm:min-h-72 shadow-xl border border-border/80 group">
@@ -325,8 +420,55 @@ export const TripDetails: React.FC = () => {
         </div>
       </div>
 
+      <WeatherWidget location={{ city: trip.destination_city, country: trip.destination_country }} />
+
+      {/* Section Tabs: Itinerary / Documents / Checklist / Budget */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-border/80 print:hidden">
+        {(
+          [
+            { value: 'itinerary', label: 'Itinerary', icon: Compass },
+            { value: 'documents', label: 'Documents', icon: FileText },
+            { value: 'checklist', label: 'Checklist', icon: ListChecks },
+            { value: 'budget', label: 'Budget', icon: Wallet },
+          ] as { value: TripSection; label: string; icon: typeof Compass }[]
+        ).map((s) => (
+          <button
+            key={s.value}
+            onClick={() => setSection(s.value)}
+            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+              section === s.value
+                ? 'bg-teal-600 text-white shadow-md shadow-teal-500/25 scale-[1.02]'
+                : 'bg-card/80 border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+            }`}
+          >
+            <s.icon className="h-3.5 w-3.5" />
+            <span>{s.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {section === 'documents' && (
+        <TripDocuments tripId={trip.id} userId={user?.id || 'demo-user-123456'} />
+      )}
+
+      {section === 'checklist' && (
+        <TripChecklist
+          tripId={trip.id}
+          trip={trip}
+          activityCategories={Array.from(
+            new Set(days.flatMap((d) => (d.activities || []).map((a) => a.category)))
+          )}
+        />
+      )}
+
+      {section === 'budget' && (
+        <TripExpenses tripId={trip.id} trip={trip} defaultPaidBy={profile?.full_name || user?.email || 'You'} />
+      )}
+
+      {section === 'itinerary' && (
+      <>
       {/* Day Selector Tabs with Add Day Button */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-border/80">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-border/80 print:hidden">
         {days.map((day, idx) => (
           <button
             key={day.id}
@@ -356,7 +498,7 @@ export const TripDetails: React.FC = () => {
 
       {/* Day Content & Activities Timeline */}
       {currentDay ? (
-        <div className="space-y-4">
+        <div className="space-y-4 print:hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card/80 backdrop-blur-xs p-5 rounded-2xl border border-border/80 shadow-xs">
             <div>
               <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-foreground">
@@ -386,6 +528,25 @@ export const TripDetails: React.FC = () => {
               <Plus className="h-4 w-4" />
               <span>Add Activity</span>
             </Button>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/70">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                <h3 className="text-sm font-bold">Day {currentDay.day_number} map</h3>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {(currentDay.activities || []).filter(
+                  (activity) => typeof activity.lat === 'number' && typeof activity.lng === 'number'
+                ).length}{' '}
+                places mapped
+              </span>
+            </div>
+            <ItineraryMap
+              activities={currentDay.activities || []}
+              className="h-72 w-full z-0"
+            />
           </div>
 
           {/* Activities List */}
@@ -488,6 +649,38 @@ export const TripDetails: React.FC = () => {
         </div>
       ) : null}
 
+      {/* Print-only full itinerary (all days), used when printing / saving as PDF */}
+      <div className="hidden print:block space-y-6 text-black">
+        <h1 className="text-2xl font-bold">{trip.title}</h1>
+        <p className="text-sm">
+          {trip.destination_city}, {trip.destination_country} • {formatDate(trip.start_date)} -{' '}
+          {formatDate(trip.end_date)}
+        </p>
+        {days.map((day) => (
+          <div key={day.id} className="space-y-2 break-inside-avoid">
+            <h2 className="text-lg font-bold border-b border-black/20 pb-1">
+              Day {day.day_number}: {day.title || 'Exploration'} — {formatDate(day.date)}
+            </h2>
+            {(day.activities || []).length === 0 ? (
+              <p className="text-sm italic">No activities scheduled.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {(day.activities || []).map((activity) => (
+                  <li key={activity.id} className="text-sm">
+                    <span className="font-semibold">{activity.time_slot || 'Anytime'}</span> —{' '}
+                    {activity.place_name} <span className="italic">({activity.category})</span>
+                    {activity.estimated_cost ? ` — ${formatPrice(activity.estimated_cost)}` : ''}
+                    {activity.notes ? ` — ${activity.notes}` : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+      </>
+      )}
+
       {/* Activity Add/Edit Modal */}
       {currentDay && (
         <ActivityModal
@@ -517,6 +710,16 @@ export const TripDetails: React.FC = () => {
           queryClient.invalidateQueries({ queryKey: ['trip', tripId] })
           queryClient.invalidateQueries({ queryKey: ['trips'] })
         }}
+      />
+
+      {/* Collaborators Modal */}
+      <CollaboratorsModal
+        isOpen={isCollaboratorsOpen}
+        onClose={() => setIsCollaboratorsOpen(false)}
+        tripId={trip.id}
+        isOwner={isOwner}
+        currentUserId={user?.id}
+        activeUsers={otherActiveUsers}
       />
     </div>
   )

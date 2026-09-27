@@ -1,0 +1,144 @@
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import type { MemberRole, TripMember } from '@/types/database.types'
+
+const mockMembersStorageKey = 'smartplanner_local_trip_members'
+
+const getLocalData = <T>(key: string, defaultValue: T): T => {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : defaultValue
+  } catch {
+    return defaultValue
+  }
+}
+
+const setLocalData = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch (err) {
+    console.error('LocalStorage write failed:', err)
+  }
+}
+
+const isRealTrip = (tripId: string) => !tripId.startsWith('demo-') && !tripId.startsWith('trip-')
+
+export const tripMemberService = {
+  async getMembers(tripId: string): Promise<TripMember[]> {
+    if (isSupabaseConfigured && isRealTrip(tripId)) {
+      try {
+        const { data, error } = await supabase
+          .from('trip_members')
+          .select('*, profile:profiles(*)')
+          .eq('trip_id', tripId)
+          .order('invited_at', { ascending: true })
+
+        if (!error && data) return data as unknown as TripMember[]
+      } catch (err) {
+        console.error('Failed to get trip members from Supabase:', err)
+      }
+    }
+
+    return getLocalData<TripMember[]>(mockMembersStorageKey, []).filter((m) => m.trip_id === tripId)
+  },
+
+  async inviteByEmail(
+    tripId: string,
+    email: string,
+    role: MemberRole
+  ): Promise<{ member: TripMember | null; error: Error | null }> {
+    const normalizedEmail = email.trim().toLowerCase()
+
+    if (isSupabaseConfigured && isRealTrip(tripId)) {
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', normalizedEmail)
+          .maybeSingle()
+
+        if (profileError || !profile) {
+          return { member: null, error: new Error('No user found with that email. They need to sign up first.') }
+        }
+
+        const { data, error } = await supabase
+          .from('trip_members')
+          .insert({ trip_id: tripId, user_id: profile.id, role })
+          .select('*, profile:profiles(*)')
+          .single()
+
+        if (error) {
+          return {
+            member: null,
+            error: new Error(
+              error.code === '23505' ? 'This person is already a collaborator on this trip.' : error.message
+            ),
+          }
+        }
+        return { member: data as unknown as TripMember, error: null }
+      } catch (err: any) {
+        return { member: null, error: new Error(err.message || 'Failed to invite collaborator') }
+      }
+    }
+
+    // Local / Demo fallback — creates a placeholder collaborator entry
+    const currentMembers = getLocalData<TripMember[]>(mockMembersStorageKey, [])
+    if (currentMembers.some((m) => m.trip_id === tripId && m.profile?.email === normalizedEmail)) {
+      return { member: null, error: new Error('This person is already a collaborator on this trip.') }
+    }
+
+    const newMember: TripMember = {
+      id: `mem-${Date.now()}`,
+      trip_id: tripId,
+      user_id: `invited-${Date.now()}`,
+      role,
+      created_at: new Date().toISOString(),
+      profile: {
+        id: `invited-${Date.now()}`,
+        email: normalizedEmail,
+        full_name: normalizedEmail.split('@')[0],
+        avatar_url: null,
+        travel_preferences: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    }
+    setLocalData(mockMembersStorageKey, [...currentMembers, newMember])
+    return { member: newMember, error: null }
+  },
+
+  async updateRole(memberId: string, role: MemberRole): Promise<{ error: Error | null }> {
+    if (isSupabaseConfigured && !memberId.startsWith('mem-')) {
+      try {
+        const { error } = await supabase.from('trip_members').update({ role }).eq('id', memberId)
+        return { error: error ? new Error(error.message) : null }
+      } catch (err: any) {
+        return { error: new Error(err.message) }
+      }
+    }
+
+    const currentMembers = getLocalData<TripMember[]>(mockMembersStorageKey, [])
+    setLocalData(
+      mockMembersStorageKey,
+      currentMembers.map((m) => (m.id === memberId ? { ...m, role } : m))
+    )
+    return { error: null }
+  },
+
+  async removeMember(memberId: string): Promise<{ error: Error | null }> {
+    if (isSupabaseConfigured && !memberId.startsWith('mem-')) {
+      try {
+        const { error } = await supabase.from('trip_members').delete().eq('id', memberId)
+        return { error: error ? new Error(error.message) : null }
+      } catch (err: any) {
+        return { error: new Error(err.message) }
+      }
+    }
+
+    const currentMembers = getLocalData<TripMember[]>(mockMembersStorageKey, [])
+    setLocalData(
+      mockMembersStorageKey,
+      currentMembers.filter((m) => m.id !== memberId)
+    )
+    return { error: null }
+  },
+}
