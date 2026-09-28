@@ -34,7 +34,7 @@ export function App() {
       <ThemeProvider>
         <CurrencyProvider>
           <AuthProvider>
-            <BrowserRouter>
+            <BrowserRouter basename={import.meta.env.BASE_URL}>
               <Routes>
                 {/* Public Auth Routes */}
                 <Route path="/login" element={<Login />} />
