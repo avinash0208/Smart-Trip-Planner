@@ -1,20 +1,15 @@
 import type { Activity, ChecklistCategory, ItineraryDay, Trip } from '@/types/database.types'
+import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 
-const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || '').trim()
-
-export const isAIConfigured = Boolean(
-  GEMINI_API_KEY && !GEMINI_API_KEY.includes('your-gemini') && !GEMINI_API_KEY.includes('placeholder')
-)
+// Gemini is called only by the Supabase Edge Function. This keeps its API key
+// off the browser and out of the publicly downloadable Vite bundle.
+export const isAIConfigured = isSupabaseConfigured
 
 if (!isAIConfigured) {
   console.warn(
-    '⚠️ Gemini AI is not configured. VITE_GEMINI_API_KEY is missing — AI features will use offline sample content.'
+    '⚠️ Supabase is not configured. AI features will use offline sample content.'
   )
 }
-
-// "latest" alias always resolves to the current recommended flash model, avoiding pinned-version deprecation
-const GEMINI_MODEL = 'gemini-flash-latest'
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 
 type GeminiSchema = Record<string, unknown>
 
@@ -31,39 +26,20 @@ async function callGemini(
     throw new Error('AI is not configured')
   }
 
-  const body: Record<string, unknown> = { contents }
-
-  if (options.systemInstruction) {
-    body.systemInstruction = { parts: [{ text: options.systemInstruction }] }
-  }
-
-  body.generationConfig = options.schema
-    ? {
-        responseMimeType: 'application/json',
-        responseSchema: options.schema,
-        temperature: options.temperature ?? 0.8,
-      }
-    : { temperature: options.temperature ?? 0.7 }
-
-  const response = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+  const { data, error } = await supabase.functions.invoke('gemini', {
+    body: { contents, options },
   })
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '')
-    throw new Error(`AI request failed (${response.status}): ${errText.slice(0, 200)}`)
+  if (error) {
+    throw new Error(`AI request failed: ${error.message}`)
   }
 
-  const data = await response.json()
-  const text =
-    data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || ''
+  const text = typeof data === 'object' && data !== null && 'text' in data ? data.text : ''
 
-  if (!text.trim()) {
+  if (typeof text !== 'string' || !text.trim()) {
     throw new Error('AI returned an empty response')
   }
-  return text
+  return text.trim()
 }
 
 // ---------------------------------------------------------------------------

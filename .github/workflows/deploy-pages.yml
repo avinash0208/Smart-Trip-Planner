@@ -37,7 +37,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_GEMINI_API_KEY: ${{ vars.VITE_GEMINI_API_KEY }}
           VITE_OPENWEATHER_API_KEY: ${{ vars.VITE_OPENWEATHER_API_KEY }}
         run: npm run build
 

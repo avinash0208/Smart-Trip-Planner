@@ -49,13 +49,39 @@ Create a `.env` file in the project root if you want to enable live integrations
 ```dotenv
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_GEMINI_API_KEY=your-gemini-api-key
 VITE_OPENWEATHER_API_KEY=your-openweather-api-key
 ```
 
 Supabase enables persistent authentication, trip data, storage, collaboration, and realtime updates. Apply [`supabase/schema.sql`](supabase/schema.sql) to a Supabase project before using the live backend.
 
 Without configuration, the app supports demo sign-in and deterministic fallback content for AI and weather features. Do not expose a privileged Supabase service-role key or other server-only secrets in a Vite environment variable.
+
+### Deploy the Gemini Edge Function
+
+Gemini is intentionally server-side: the browser calls the `gemini` Supabase Edge Function, which holds the API key. Do **not** create a `VITE_GEMINI_API_KEY` GitHub variable.
+
+Install and authenticate the Supabase CLI, then link this project and deploy the function:
+
+```bash
+npx supabase login
+npx supabase link --project-ref ncjwhmmbmsrbzctafdzh
+npx supabase functions deploy gemini
+```
+
+In the Supabase dashboard, open **Edge Functions → Secrets** and create these secrets:
+
+```text
+GEMINI_API_KEY=<your new Gemini key>
+ALLOWED_ORIGINS=https://avinash0208.github.io
+```
+
+You can set the same values from the CLI instead:
+
+```bash
+npx supabase secrets set GEMINI_API_KEY=your-gemini-key ALLOWED_ORIGINS=https://avinash0208.github.io
+```
+
+For local Edge Function development, copy [`supabase/functions/.env.example`](supabase/functions/.env.example) to `supabase/functions/.env` and add your key. This local `.env` file is ignored by Git.
 
 ## Routes
 

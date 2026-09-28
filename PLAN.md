@@ -140,7 +140,7 @@ erDiagram
 - AI-Powered Itinerary Generator (`/ai-planner`): One-click itinerary creation from duration, interests, pace, and budget tier, with a save-as-trip flow via Gemini structured output.
 - Context-Aware Travel Companion Chatbot: Per-trip chat with quick prompt chips for food, budget, packing, and rainy-day suggestions.
 - GPT Trip Summarizer: "Your trip in 2 minutes" — highlights, local customs, and packing tips.
-- `aiService` wraps the Gemini REST API (`gemini-flash-latest`) with graceful offline fallbacks when `VITE_GEMINI_API_KEY` isn't configured.
+- `aiService` calls the protected Supabase `gemini` Edge Function (Gemini 3.8 Flash) with graceful offline fallbacks when Supabase isn't configured or the provider is unavailable. The Gemini API key remains a server-only Edge Function secret.
 
 ### 📌 Phase 5: Document Vault, Checklists & Expense Tracker *(Completed)*
 - Booking & Ticket Vault: Upload, preview/download, and delete flight/hotel/insurance files via Supabase Storage (private `trip-documents` bucket), with an offline demo-mode fallback that keeps small files inline as base64.

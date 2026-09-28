@@ -29,8 +29,7 @@ export const AIPlanner: React.FC = () => {
         </p>
         {!isAIConfigured && (
           <p className="text-[11px] text-teal-50/80 mt-3 bg-black/15 border border-white/20 rounded-xl px-3 py-2 inline-block">
-            Running in offline demo mode — add <code className="font-mono">VITE_GEMINI_API_KEY</code> to your .env file for
-            live AI responses.
+            Running in offline demo mode — configure Supabase to enable live AI responses.
           </p>
         )}
       </div>
