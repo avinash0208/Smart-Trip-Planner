@@ -14,6 +14,16 @@
   </head>
   <body class="font-sans antialiased">
     <div id="root"></div>
+    <script>
+      // GitHub Pages serves the static 404.html for deep links. Restore the
+      // route it forwards here before React Router starts.
+      (function () {
+        var route = new URLSearchParams(window.location.search).get('route')
+        if (route) {
+          window.history.replaceState(null, '', '/Smart-Trip-Planner' + route)
+        }
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

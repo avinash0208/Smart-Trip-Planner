@@ -11,6 +11,10 @@ type GeminiOptions = {
 
 const GEMINI_MODEL = 'gemini-3.8-flash'
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
+const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504])
+const MAX_GEMINI_ATTEMPTS = 3
+
+const delay = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 function isLocalDevelopmentOrigin(origin: string) {
   try {
     const url = new URL(origin)
@@ -117,14 +121,25 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const response = await fetch(GEMINI_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify(body),
-    })
+    let response: Response | null = null
+    for (let attempt = 1; attempt <= MAX_GEMINI_ATTEMPTS; attempt += 1) {
+      response = await fetch(GEMINI_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (response.ok || !RETRYABLE_GEMINI_STATUSES.has(response.status) || attempt === MAX_GEMINI_ATTEMPTS) break
+
+      // Structured-output requests are occasionally retried by Gemini while a
+      // model is busy. Back off briefly instead of failing the user immediately.
+      await delay(400 * 2 ** (attempt - 1))
+    }
+
+    if (!response) return json({ error: 'AI provider did not return a response' }, 502, headers)
 
     if (!response.ok) {
       const detail = await response.text()

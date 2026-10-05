@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redirecting…</title>
+    <script>
+      // GitHub Pages cannot rewrite SPA routes. Preserve the requested route,
+      // load the application entry point, then let index.html restore it.
+      ;(function () {
+        var basePath = '/Smart-Trip-Planner'
+        var requestedPath = window.location.pathname.indexOf(basePath) === 0
+          ? window.location.pathname.slice(basePath.length) || '/'
+          : window.location.pathname
+        var route = requestedPath + window.location.search + window.location.hash
+        window.location.replace(basePath + '/?route=' + encodeURIComponent(route))
+      })()
+    </script>
+  </head>
+  <body></body>
+</html>
