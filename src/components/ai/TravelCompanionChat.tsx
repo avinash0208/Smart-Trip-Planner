@@ -16,6 +16,27 @@ const QUICK_PROMPTS = [
   'Suggest an offbeat hidden gem',
 ]
 
+/** Renders the small, safe Markdown subset requested from the travel companion. */
+const renderMessageContent = (content: string) =>
+  content.split('\n').map((line, lineIndex, lines) => {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g)
+
+    return (
+      <React.Fragment key={`${line}-${lineIndex}`}>
+        {parts.map((part, partIndex) =>
+          part.startsWith('**') && part.endsWith('**') ? (
+            <strong key={partIndex} className="font-bold text-inherit">
+              {part.slice(2, -2)}
+            </strong>
+          ) : (
+            <React.Fragment key={partIndex}>{part}</React.Fragment>
+          )
+        )}
+        {lineIndex < lines.length - 1 && <br />}
+      </React.Fragment>
+    )
+  })
+
 export const TravelCompanionChat: React.FC = () => {
   const { user } = useAuth()
   const { data: trips = [] } = useQuery({
@@ -120,13 +141,13 @@ export const TravelCompanionChat: React.FC = () => {
                   {msg.role === 'user' ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
                 </div>
                 <div
-                  className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-line ${
+                  className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
                     msg.role === 'user'
                       ? 'bg-teal-600 text-white rounded-tr-sm'
                       : 'bg-card border border-border/70 text-foreground rounded-tl-sm'
                   }`}
                 >
-                  {msg.content}
+                  {renderMessageContent(msg.content)}
                 </div>
               </div>
             ))

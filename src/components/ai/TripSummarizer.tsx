@@ -23,15 +23,13 @@ export const TripSummarizer: React.FC = () => {
     }
   }, [trips, selectedTripId])
 
-  const { data: tripDetails } = useQuery({
-    queryKey: ['trip', selectedTripId],
-    queryFn: () => tripService.getTripById(selectedTripId),
-    enabled: Boolean(selectedTripId),
-  })
-
   const summarizeMutation = useMutation({
-    mutationFn: async () => {
-      if (!tripDetails?.trip) throw new Error('Select a trip first')
+    // Fetch the selected trip in the mutation so a click immediately after a
+    // dropdown change cannot race the asynchronous details query.
+    mutationFn: async (tripId: string) => {
+      if (!tripId) throw new Error('Select a trip first')
+      const tripDetails = await tripService.getTripById(tripId)
+      if (!tripDetails.trip) throw new Error('The selected trip could not be found')
       return summarizeTrip(tripDetails.trip, tripDetails.days)
     },
     onSuccess: (result) => setSummary(result),
@@ -61,7 +59,7 @@ export const TripSummarizer: React.FC = () => {
         </select>
 
         <Button
-          onClick={() => summarizeMutation.mutate()}
+          onClick={() => summarizeMutation.mutate(selectedTripId)}
           disabled={!selectedTripId || summarizeMutation.isPending}
           className="w-full gap-2 bg-linear-to-r from-teal-600 to-emerald-600"
         >
