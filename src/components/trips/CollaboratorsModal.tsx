@@ -12,6 +12,7 @@ interface CollaboratorsModalProps {
   onClose: () => void
   tripId: string
   isOwner: boolean
+  isLocalTrip: boolean
   currentUserId?: string
   activeUsers: PresenceUser[]
 }
@@ -27,6 +28,7 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
   onClose,
   tripId,
   isOwner,
+  isLocalTrip,
   currentUserId,
   activeUsers,
 }) => {
@@ -35,7 +37,7 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
   const [role, setRole] = useState<MemberRole>('editor')
   const [error, setError] = useState<string | null>(null)
 
-  const { data: members = [], isLoading } = useQuery({
+  const { data: members = [], isLoading, error: membersError } = useQuery({
     queryKey: ['trip-members', tripId],
     queryFn: () => tripMemberService.getMembers(tripId),
     enabled: isOpen && Boolean(tripId),
@@ -72,6 +74,7 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
       setError('Please enter an email address')
       return
     }
+    setError(null)
     inviteMutation.mutate()
   }
 
@@ -99,6 +102,11 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {membersError && (
+            <div className="p-2.5 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl">
+              Could not load collaborators: {(membersError as Error).message}
+            </div>
+          )}
           {isOwner && (
             <form onSubmit={handleInvite} className="space-y-2.5">
               <label className="font-bold text-foreground text-xs flex items-center gap-1.5">
@@ -135,6 +143,16 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
                 </div>
               )}
             </form>
+          )}
+          {isLocalTrip && (
+            <div className="p-2.5 text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              This is a browser-local trip. Collaborators added here are stored only on this device; email invitations and live sharing require a Supabase-backed trip.
+            </div>
+          )}
+          {!isOwner && (
+            <div className="p-2.5 text-xs text-muted-foreground bg-secondary/50 border border-border rounded-xl">
+              Only the trip owner can invite collaborators or manage their roles.
+            </div>
           )}
 
           <div className="space-y-2">

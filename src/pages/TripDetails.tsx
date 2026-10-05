@@ -77,7 +77,11 @@ export const TripDetails: React.FC = () => {
 
   const trip = data?.trip
   const days = data?.days || []
-  const isOwner = Boolean(trip && user && trip.owner_id === user.id)
+  // Trips created before Supabase was configured are kept in this browser's
+  // local storage and use a local `trip-` identifier. Treat the current local
+  // user as their manager so legacy trips do not lose their editing controls.
+  const isLocalTrip = Boolean(trip?.id.startsWith('trip-') || trip?.id.startsWith('demo-'))
+  const isOwner = Boolean(trip && user && (trip.owner_id === user.id || isLocalTrip))
 
   const { activeUsers, recentActivity } = useTripCollaboration(
     trip?.id,
@@ -718,6 +722,7 @@ export const TripDetails: React.FC = () => {
         onClose={() => setIsCollaboratorsOpen(false)}
         tripId={trip.id}
         isOwner={isOwner}
+        isLocalTrip={isLocalTrip}
         currentUserId={user?.id}
         activeUsers={otherActiveUsers}
       />

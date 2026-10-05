@@ -32,9 +32,11 @@ export const tripMemberService = {
           .eq('trip_id', tripId)
           .order('invited_at', { ascending: true })
 
-        if (!error && data) return data as unknown as TripMember[]
+        if (error) throw new Error(error.message)
+        return (data || []) as unknown as TripMember[]
       } catch (err) {
         console.error('Failed to get trip members from Supabase:', err)
+        throw err
       }
     }
 
@@ -50,33 +52,17 @@ export const tripMemberService = {
 
     if (isSupabaseConfigured && isRealTrip(tripId)) {
       try {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', normalizedEmail)
-          .maybeSingle()
-
-        if (profileError || !profile) {
-          return { member: null, error: new Error('No user found with that email. They need to sign up first.') }
+        const { data, error } = await supabase.functions.invoke('invite-collaborator', {
+          body: { tripId, email: normalizedEmail, role },
+        })
+        if (error) return { member: null, error: new Error(error.message || 'Failed to invite collaborator') }
+        if (!data || typeof data !== 'object' || !('member' in data) || !data.member) {
+          const message = typeof data === 'object' && data !== null && 'error' in data ? data.error : null
+          return { member: null, error: new Error(typeof message === 'string' ? message : 'Failed to invite collaborator') }
         }
-
-        const { data, error } = await supabase
-          .from('trip_members')
-          .insert({ trip_id: tripId, user_id: profile.id, role })
-          .select('*, profile:profiles(*)')
-          .single()
-
-        if (error) {
-          return {
-            member: null,
-            error: new Error(
-              error.code === '23505' ? 'This person is already a collaborator on this trip.' : error.message
-            ),
-          }
-        }
-        return { member: data as unknown as TripMember, error: null }
-      } catch (err: any) {
-        return { member: null, error: new Error(err.message || 'Failed to invite collaborator') }
+        return { member: data.member as TripMember, error: null }
+      } catch (err: unknown) {
+        return { member: null, error: new Error(err instanceof Error ? err.message : 'Failed to invite collaborator') }
       }
     }
 

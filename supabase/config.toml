@@ -1,2 +1,5 @@
 [functions.gemini]
 verify_jwt = true
+
+[functions.invite-collaborator]
+verify_jwt = true

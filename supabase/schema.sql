@@ -80,16 +80,70 @@ CREATE TABLE IF NOT EXISTS public.trip_members (
 ALTER TABLE public.trip_members ENABLE ROW LEVEL SECURITY;
 
 -- Trip Members RLS Policies
+CREATE OR REPLACE FUNCTION public.is_trip_member(target_trip_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.trip_members
+    WHERE trip_id = target_trip_id AND user_id = auth.uid()
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_trip_member(UUID) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.is_trip_owner(target_trip_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.trips WHERE id = target_trip_id AND owner_id = auth.uid()
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_trip_public(target_trip_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.trips WHERE id = target_trip_id AND visibility = 'public'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_trip_editor(target_trip_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.trip_members
+    WHERE trip_id = target_trip_id AND user_id = auth.uid() AND role IN ('owner', 'editor')
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_trip_owner(UUID), public.is_trip_public(UUID), public.is_trip_editor(UUID) TO authenticated;
+
 DROP POLICY IF EXISTS "Members can view collaborators of accessible trips" ON public.trip_members;
 CREATE POLICY "Members can view collaborators of accessible trips"
   ON public.trip_members FOR SELECT
   TO authenticated
   USING (
-    trip_id IN (
-      SELECT id FROM public.trips WHERE owner_id = auth.uid() OR visibility = 'public'
-      UNION
-      SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid()
-    )
+    public.is_trip_owner(trip_members.trip_id)
+    OR public.is_trip_public(trip_members.trip_id)
+    OR public.is_trip_member(trip_members.trip_id)
   );
 
 DROP POLICY IF EXISTS "Trip owners can invite collaborators" ON public.trip_members;
@@ -119,9 +173,9 @@ CREATE POLICY "Users can view trips they own or belong to, or public trips"
   ON public.trips FOR SELECT
   TO authenticated
   USING (
-    owner_id = auth.uid() 
+    owner_id = auth.uid()
     OR visibility = 'public'
-    OR id IN (SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid())
+    OR public.is_trip_member(id)
   );
 
 DROP POLICY IF EXISTS "Users can insert trips they own" ON public.trips;
@@ -135,8 +189,8 @@ CREATE POLICY "Owners and editors can update trips"
   ON public.trips FOR UPDATE
   TO authenticated
   USING (
-    owner_id = auth.uid() 
-    OR id IN (SELECT trip_id FROM public.trip_members WHERE user_id = auth.uid() AND role = 'editor')
+    owner_id = auth.uid()
+    OR public.is_trip_editor(id)
   );
 
 DROP POLICY IF EXISTS "Only owners can delete trips" ON public.trips;
